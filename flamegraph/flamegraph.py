@@ -1,3 +1,4 @@
+import contextlib
 import re
 import sys
 import time
@@ -18,21 +19,20 @@ def get_thread_name(ident):
 def default_format_entry(threadname, fname, line, fun, fmt='%(threadname)s`%(fun)s'):
   return fmt % locals()
 
-def create_flamegraph_entry(thread_id, frame, format_entry, collapse_recursion=False):
+def create_flamegraph_entry(thread_id, stack, format_entry, collapse_recursion=False):
   threadname = get_thread_name(thread_id)
 
-  # [1:] to skip first frame which is in this program
   if collapse_recursion:
     ret = []
     last = None
-    for fn, ln, fun, text in traceback.extract_stack(frame)[1:]:
+    for fn, ln, fun, text in stack:
       if last != fun:
         ret.append(format_entry(threadname, fn, ln, fun))
       last = fun
     return ';'.join(ret)
 
   return ';'.join(format_entry(threadname, fn, ln, fun)
-      for fn, ln, fun, text in traceback.extract_stack(frame)[1:])
+      for fn, ln, fun, text in stack)
 
 class ProfileThread(threading.Thread):
   def __init__(self, fd, interval, filter, format_entry, collapse_recursion=False):
@@ -65,7 +65,9 @@ class ProfileThread(threading.Thread):
         if thread_id == my_thread:
           continue
 
-        entry = create_flamegraph_entry(thread_id, frame, self._format_entry, self._collapse_recursion)
+        # [1:] to skip first frame which is in this program
+        stack = traceback.extract_stack(frame)[1:]
+        entry = create_flamegraph_entry(thread_id, stack, self._format_entry, self._collapse_recursion)
         if self._filter is None or self._filter.search(entry):
           with self._lock:
             self._stats[entry] += 1
@@ -81,7 +83,6 @@ class ProfileThread(threading.Thread):
       self._written = True
       for key in sorted(self._stats.keys()):
         self._fd.write('%s %d\n' % (key, self._stats[key]))
-      self._fd.close()
 
   def num_frames(self, unique=False):
     if unique:
@@ -109,6 +110,16 @@ def start_profile_thread(fd, interval=0.001, filter=None, format_entry=default_f
   profile_thread.start()
   return profile_thread
 
+@contextlib.contextmanager
+def profile(*args, **kwds):
+  """Profile active threads in the background."""
+  thread = start_profile_thread(*args, **kwds)
+  try:
+    yield thread
+  finally:
+    thread.stop()
+    thread.join()
+
 def main():
   parser = argparse.ArgumentParser(prog='python -m flamegraph', description="Sample python stack frames for use with FlameGraph")
   parser.add_argument('script_file', metavar='script.py', type=str,
@@ -133,7 +144,6 @@ def main():
   print(args)
 
   format_entry = functools.partial(default_format_entry, fmt=args.format)
-  thread = ProfileThread(args.output, args.interval, args.filter, format_entry, args.collapse_recursion)
 
   if not os.path.isfile(args.script_file):
     parser.error('Script file does not exist: ' + args.script_file)
@@ -144,16 +154,15 @@ def main():
   script_globals = {'__name__': '__main__', '__file__': args.script_file, '__package__': None}
 
   start_time = time.clock()
-  thread.start()
-
-  try:
+  profile_args = (
+    args.output,
+    args.interval,
+    args.filter,
+    format_entry,
+    args.collapse_recursion
+  )
+  with profile(*profile_args) as thread:
     # exec docs say globals and locals should be same dictionary else treated as class context
     exec(script_compiled, script_globals, script_globals)
-  finally:
-    thread.stop()
-    thread.join()
-    print('Elapsed Time: %2.2f seconds.  Collected %d stack frames (%d unique)'
-        % (time.clock() - start_time, thread.num_frames(), thread.num_frames(unique=True)))
-
-if __name__ == '__main__':
-  main()
+  print('Elapsed Time: %2.2f seconds.  Collected %d stack frames (%d unique)'
+      % (time.clock() - start_time, thread.num_frames(), thread.num_frames(unique=True)))

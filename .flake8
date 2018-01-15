@@ -1,0 +1,14 @@
+# -*- coding: utf-8 -*-
+
+
+[flake8]
+ignore =
+  E111  # indentation is not a multiple of four
+  E114  # indentation is not a multiple of four (comment)
+  E121  # continuation line under-indented for hanging indent
+  E128  # continuation line under indented
+  E261  # at least two spaces before inline comment
+  E302  # expected 2 blank lines, found 1
+  E303  # too many blank lines
+  E305  # expected 2 blank lines after class
+  E501  # line too long

@@ -1,4 +1,4 @@
 from __future__ import absolute_import
-from flamegraph import flamegraph
-if __name__ == '__main__':
-  flamegraph.main()
+from flamegraph.flamegraph import main
+if __name__ == '__main__':  # pragma: no cover
+  main()

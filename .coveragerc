@@ -1,0 +1,11 @@
+# -*- coding: utf-8 -*-
+
+[run]
+branch = True
+source = flamegraph
+
+[paths]
+source =
+  src/flamegraph
+  .tox/*/Lib/site-packages/flamegraph
+  .tox/*/lib/python*/site-packages/flamegraph

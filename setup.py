@@ -18,7 +18,12 @@ setup(
       'License :: Public Domain',
       'Programming Language :: Python',
       'Topic :: Software Development :: Debuggers',
-      ]
-    )
+    ],
+    entry_points={
+        'console_scripts': [
+            'flamegraph = flamegraph.__main__:main',
+        ],
+    },
+)
 
 
